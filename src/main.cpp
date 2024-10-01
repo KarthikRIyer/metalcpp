@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <vector>
+#include <fstream>
+#include <sstream>
 
 // Function to set up the Metal device and command queue
 void setupMetal(MTL::Device*& device, MTL::CommandQueue*& commandQueue) {
@@ -22,25 +24,42 @@ MTL::Function* compileShader(MTL::Device* device, const char* shaderSource) {
     return library->newFunction(NS::String::string("compute_function", NS::UTF8StringEncoding));
 }
 
-int main() {
+std::string readMSLFile(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file: " + filename);
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+int main(int argc, char* argv[]) {
+    std::filesystem::path shaderRootDir;
+    // Check if a shader root directory was provided as a command-line argument
+    if (argc > 1) {
+        shaderRootDir = argv[1];
+    } else {
+        std::cout<<"Provide shader root directory!";
+        return 1;
+    }
+
     MTL::Device* device = nullptr;
     MTL::CommandQueue* commandQueue = nullptr;
     setupMetal(device, commandQueue);
 
     // Define the compute shader
-    const char* shaderSource = R"(
-        #include <metal_stdlib>
-        using namespace metal;
-
-        kernel void compute_function(device float* input [[buffer(0)]],
-                                     device float* output [[buffer(1)]],
-                                     uint index [[thread_position_in_grid]]) {
-            output[index] = input[index] * 2.0;
-        }
-    )";
+    std::string shaderSource;
+    try {
+        shaderSource = readMSLFile(shaderRootDir.string() + "/compute.msl");
+    } catch (const std::exception& e) {
+        std::cerr << "Error reading shader file: " << e.what() << std::endl;
+        return 1;
+    }
 
     // Compile the shader
-    MTL::Function* computeFunction = compileShader(device, shaderSource);
+    MTL::Function* computeFunction = compileShader(device, shaderSource.c_str());
     if (!computeFunction) {
         return 1;
     }
